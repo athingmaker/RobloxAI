@@ -1,54 +1,58 @@
 const express = require('express');
-const { Groq } = require('groq-sdk'); 
+const { Groq } = require('groq-sdk');
+require('dotenv').config();
 
 const app = express();
 const PORT = 3000;
-
-// ⚠️ Hardcode your Groq API key here (only safe in private repos)
-const groq = new Groq("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"); 
+const groq = new Groq(process.env.GROQ_API_KEY);
 
 app.use(express.json());
 
+// Store conversations
 const conversations = {};
 
 app.post('/', async (req, res) => {
     try {
         const [username, message] = req.body;
         
+        // Initialize conversation if new player
         if (!conversations[username]) {
             conversations[username] = [
                 {
                     role: "system",
-                    content: `You're an assistant in a Roblox game. Player: ${username}. 
-                    Keep responses short (under 150 chars). Be fun and helpful!`
+                    content: `You are a helpful assistant in a Roblox game. The player's username is ${username}. 
+                    Keep responses under 200 characters. Be friendly and game-oriented.`
                 }
             ];
         }
 
+        // Add user message
         conversations[username].push({role: "user", content: message});
 
+        // Get response from GroqAI
         const chatCompletion = await groq.chat.completions.create({
             messages: conversations[username],
             model: "mixtral-8x7b-32768",
             temperature: 0.7,
-            max_tokens: 100
+            max_tokens: 150
         });
 
-        const botResponse = chatCompletion.choices[0]?.message?.content || "Oops, I glitched! Try again.";
+        const botResponse = chatCompletion.choices[0]?.message?.content || "I didn't get that.";
         
+        // Add AI response to conversation history
         conversations[username].push({role: "assistant", content: botResponse});
-        
-        // Trim old messages to save memory
-        if (conversations[username].length > 8) {
-            conversations[username] = conversations[username].slice(-8);
+
+        // Clean up old messages to prevent memory issues
+        if (conversations[username].length > 10) {
+            conversations[username] = conversations[username].slice(-10);
         }
 
         res.status(200).send(botResponse);
         
     } catch (error) {
-        console.error("Groq Error:", error);
-        res.status(500).send("Hey " + (username || "friend") + ", my circuits are fuzzy! 🌀 Try again later!");
+        console.error("GroqAI Error:", error);
+        res.status(500).send("Hey " + (username || "player") + ", the AI is taking a break. Try again soon!");
     }
 });
 
-app.listen(PORT, () => console.log(`🚀 AI proxy running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
